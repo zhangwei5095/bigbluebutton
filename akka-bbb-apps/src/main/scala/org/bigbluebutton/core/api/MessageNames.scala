@@ -105,6 +105,7 @@ object MessageNames {
   val PRESENTER_ASSIGNED = "presenter_assigned_message"
   val END_AND_KICK_ALL = "end_and_kick_all_message"
   val GET_USERS_REPLY = "get_users_reply"
+  val USER_EJECTED_FROM_MEETING = "user_ejected_from_meeting"
   val USER_JOINED = "user_joined_message"
   val USER_EMOJI_STATUS = "user_emoji_status_message"
   val USER_SHARED_WEBCAM = "user_shared_webcam_message"
@@ -161,5 +162,11 @@ object MessageNames {
   val MEETING_DESTROYED_EVENT = "meeting_destroyed_event"
   val KEEP_ALIVE_REPLY = "keep_alive_reply"
   val USER_LISTEN_ONLY = "user_listening_only"
-  val GET_ALL_MEETINGS_REPLY = "get_all_meetings_reply"
+  val GET_ALL_MEETINGS_REPLY = "get_all_meetings_reply_message"
+  val EDIT_CAPTION_HISTORY = "edit_caption_history_message"
+  val UPDATE_CAPTION_OWNER = "update_caption_owner_message"
+  val SEND_CAPTION_HISTORY_REPLY = "send_caption_history_reply_message"
+
+  // breakout rooms
+  val BREAKOUT_ROOM_STARTED = "BreakoutRoomStarted"
 }

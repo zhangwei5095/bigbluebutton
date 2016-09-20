@@ -58,6 +58,18 @@ package org.bigbluebutton.core
       return false;
     }
     
+	public static function setUserEjected():void {
+		UserManager.getInstance().getConference().setUserEjectedFromMeeting();	
+	}
+	
+	public static function isUserEjected():Boolean {
+		return UserManager.getInstance().getConference().getUserEjectedFromMeeting();
+	}
+	
+  public static function isRecorded():Boolean {
+    return UserManager.getInstance().getConference().record;
+  }
+  
     public static function amIPublishing():CameraSettingsVO {
      return UserManager.getInstance().getConference().amIPublishing();
     }
@@ -99,6 +111,10 @@ package org.bigbluebutton.core
     public static function getAvatarURL():String {
       return UserManager.getInstance().getConference().avatarURL;
     }
+
+    public static function getUserAvatarURL(userID:String):String {
+       return UserManager.getInstance().getConference().getUserAvatarURL(userID);
+    }	
 	
 	public static function getVoiceBridge():String {
 		return UserManager.getInstance().getConference().voiceBridge;

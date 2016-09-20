@@ -45,17 +45,17 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 	<mate:Listener type="{AppVersionEvent.APP_VERSION_EVENT}" method="handleApplicationVersionEvent" />	
 	<mate:Listener type="{MeetingNotFoundEvent.MEETING_NOT_FOUND}" method="handleMeetingNotFoundEvent" />
 	<mate:Listener type="{ConnectionFailedEvent.USER_LOGGED_OUT}" method="handleLogout" />
+    <mate:Listener type="{ConnectionFailedEvent.USER_EJECTED_FROM_MEETING}" method="handleLogout" />
 	<mate:Listener type="{ConnectionFailedEvent.CONNECTION_FAILED}" method="attemptReconnect" />
 	<mate:Listener type="{ConnectionFailedEvent.CONNECTION_CLOSED}" method="attemptReconnect"  />
 	<mate:Listener type="{ConnectionFailedEvent.UNKNOWN_REASON}" method="attemptReconnect"  />
 	<mate:Listener type="{ConnectionFailedEvent.CONNECTION_REJECTED}" method="attemptReconnect"  />
-	<mate:Listener type="configLoadedEvent" method="initOptions"  />
+	<mate:Listener type="{ConfigLoadedEvent.CONFIG_LOADED_EVENT}" method="initOptions"  />
 	<mate:Listener type="{FlashMicSettingsEvent.FLASH_MIC_SETTINGS}" method="handleFlashMicSettingsEvent"  />
 	<mate:Listener type="{WebRTCEchoTestEvent.WEBRTC_ECHO_TEST_CONNECTING}" method="handleWebRTCEchoTestConnectingEvent"  />
 	<mate:Listener type="{WebRTCMediaEvent.WEBRTC_MEDIA_REQUEST}" method="handleWebRTCMediaRequestEvent"  />
 	<mate:Listener type="{WebRTCCallEvent.WEBRTC_CALL_STARTED}" method="handleWebRTCCallStartedEvent" />
 	<mate:Listener type="{WebRTCCallEvent.WEBRTC_CALL_ENDED}" method="handleWebRTCCallEndedEvent" />
-	<mate:Listener type="{WebRTCAskUserToChangeMicEvent.WEBRTC_ASK_USER_TO_CHANGE_MIC}" method="handleWebRTCAskUserToChangeMicEvent"  />
 	<mate:Listener type="{AudioSelectionWindowEvent.SHOW_AUDIO_SELECTION}" method="handleShowAudioSelectionWindowEvent" />
 	<mate:Listener type="{ShareCameraRequestEvent.SHARE_CAMERA_REQUEST}" method="handleShareCameraRequestEvent" />
   
@@ -64,6 +64,7 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 	<mate:Listener type="{ShortcutEvent.OPEN_SHORTCUT_WIN}" method="openShortcutHelpWindow" />
 	<mate:Listener type="{BBBEvent.OPEN_WEBCAM_PREVIEW}" method="openVideoPreviewWindow" />
 	<mate:Listener type="{LockControlEvent.OPEN_LOCK_SETTINGS}" method="openLockSettingsWindow" />
+	<mate:Listener type="{BreakoutRoomEvent.OPEN_BREAKOUT_ROOMS_PANEL}" method="openBreakoutRoomsWindow" />
 	<mate:Listener type="{InvalidAuthTokenEvent.INVALID_AUTH_TOKEN}" method="handleInvalidAuthToken" />
 	  
 	<mx:Script>
@@ -100,20 +101,23 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 			import org.bigbluebutton.core.vo.LockSettingsVO;
 			import org.bigbluebutton.main.events.AppVersionEvent;
 			import org.bigbluebutton.main.events.BBBEvent;
+			import org.bigbluebutton.main.events.BreakoutRoomEvent;
 			import org.bigbluebutton.main.events.ClientStatusEvent;
+			import org.bigbluebutton.main.events.ConfigLoadedEvent;
 			import org.bigbluebutton.main.events.InvalidAuthTokenEvent;
 			import org.bigbluebutton.main.events.MeetingNotFoundEvent;
 			import org.bigbluebutton.main.events.ModuleLoadEvent;
 			import org.bigbluebutton.main.events.ShortcutEvent;
 			import org.bigbluebutton.main.model.LayoutOptions;
+			import org.bigbluebutton.main.model.ShortcutOptions;
 			import org.bigbluebutton.main.model.users.Conference;
 			import org.bigbluebutton.main.model.users.events.ConnectionFailedEvent;
 			import org.bigbluebutton.modules.phone.events.AudioSelectionWindowEvent;
 			import org.bigbluebutton.modules.phone.events.FlashMicSettingsEvent;
-			import org.bigbluebutton.modules.phone.events.WebRTCAskUserToChangeMicEvent;
 			import org.bigbluebutton.modules.phone.events.WebRTCCallEvent;
 			import org.bigbluebutton.modules.phone.events.WebRTCEchoTestEvent;
 			import org.bigbluebutton.modules.phone.events.WebRTCMediaEvent;
+			import org.bigbluebutton.modules.users.views.BreakoutRoomSettings;
 			import org.bigbluebutton.modules.videoconf.events.ShareCameraRequestEvent;
 			import org.bigbluebutton.util.i18n.ResourceUtil;
 	
@@ -175,22 +179,30 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 				if (!showToolbarOpt) {
 					toolbarHeight = 0;
 					toolbarPaddingTop = 0;
+					calculateCanvasHeight();
 				}
 				toolbar.displayToolbar();
-      
-        showFooterOpt = layoutOptions.showFooter;
-        
-        var locale:Object = BBB.initConfigManager().config.language;
-        langSelector.visible = locale.userSelectionEnabled
- 
-        if (!showFooterOpt) {
-          footerHeight = 0;
-          controlBar.visible = false;
-        }        
-      }
+				
+				showFooterOpt = layoutOptions.showFooter;
+				var locale:Object = BBB.getConfigManager().config.language;
+				langSelector.visible = locale.userSelectionEnabled;
+				
+				if (!showFooterOpt) {
+					footerHeight = 0;
+					controlBar.visible = false;
+					calculateCanvasHeight();
+				}
+			}
 		
 			protected function initializeShell():void {	
 				globalDispatcher = new Dispatcher();
+				
+				systemManager.addEventListener(Event.RESIZE, handleApplicationResizeEvent);
+				calculateCanvasHeight();
+			}
+			
+			private function handleApplicationResizeEvent(e:Event):void {
+				calculateCanvasHeight();
 			}
 		
 			protected function initFullScreen():void {				
@@ -200,6 +212,15 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 			}					
 			
 			private var sendStartModulesEvent:Boolean = true;
+			
+			// We have to calculate the canvas height manually because if you set it to a 
+			// percentage you will get execution timeout errors.
+			// See issue #2437 for why you shouldn't set height to 100% 
+			//             https://github.com/bigbluebutton/bigbluebutton/issues/2437
+			private function calculateCanvasHeight():void {
+				var screenRect:Rectangle = systemManager.screen;
+				mdiCanvas.height = screenRect.height - footerHeight - toolbarHeight - 12;
+			}
 			
 			private function handleApplicationVersionEvent(event:AppVersionEvent):void {
 				if (event.configLocaleVersion == true) {
@@ -251,8 +272,6 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 			public function openShortcutHelpWindow(e:Event = null):void{
 				if (scWindow == null) {
 					scWindow = new ShortcutHelpWindow();
-					scWindow.width = 300;
-					scWindow.height = 300;
 				}
 				
 				if (scWindow.minimized)
@@ -262,7 +281,7 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 					scWindow.restore();
 				
 				mdiCanvas.windowManager.add(scWindow);
-				mdiCanvas.windowManager.absPos(scWindow, mdiCanvas.width/2 - 150, mdiCanvas.height/2 - 150);
+				mdiCanvas.windowManager.absPos(scWindow, mdiCanvas.width/2 - scWindow.width/2, mdiCanvas.height/2 - scWindow.height/2);
 				
 				scWindow.focusHead();
 			}
@@ -305,7 +324,7 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 	   		}
 	   		
 			private function versionCheck():void {
-				var xml:XML = BBB.initConfigManager().config.browserVersions;
+				var xml:XML = BBB.getConfigManager().config.browserVersions;
 				if (xml.@chrome != undefined && xml.@firefox != undefined && xml.@flash != undefined) {
 					//find browser version
 					var browserVersion:Array = ExternalInterface.call("determineBrowser");
@@ -418,33 +437,6 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 		PopUpManager.centerPopUp(audioSelection);
 	  }
           
-      private function handleWebRTCAskUserToChangeMicEvent(event:WebRTCAskUserToChangeMicEvent):void {
-        var browser:String = event.browser;
-        if (browser == "Firefox") {
-          var ffBrowser:FirefoxChangeMicImage = PopUpManager.createPopUp(mdiCanvas, FirefoxChangeMicImage, true) as FirefoxChangeMicImage;
-          ffBrowser.addEventListener(FlexEvent.CREATION_COMPLETE, function(e:Event):void {
-            var point1:Point = new Point();
-            // Calculate position of TitleWindow in Application's coordinates. 
-            point1.x = width/2;
-            point1.y = height/2;
-            ffBrowser.x = point1.x - (ffBrowser.width/2);
-            ffBrowser.y = point1.y - (ffBrowser.height/2);
-            ffBrowser.x = 100;
-            ffBrowser.y = 150;
-          }); 
-        } else if (browser == "Chrome") {
-          var chromeBrowser:ChromeChangeMicImage = PopUpManager.createPopUp(mdiCanvas, ChromeChangeMicImage, true) as ChromeChangeMicImage;
-          chromeBrowser.addEventListener(FlexEvent.CREATION_COMPLETE, function(e:Event):void {
-            var point1:Point = new Point();
-            // Calculate position of TitleWindow in Application's coordinates. 
-            point1.x = width;
-            point1.y = 20;
-            chromeBrowser.x = point1.x - (chromeBrowser.width);
-            chromeBrowser.y = point1.y;           
-          });          
-        }        
-      }
-         
       private function handleWebRTCMediaRequestEvent(event:WebRTCMediaEvent):void {
         var browser:String = ExternalInterface.call("determineBrowser")[0];
         if (browser == "Firefox") {
@@ -510,9 +502,11 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
           logoutWindow.y = point1.y - (logoutWindow.height/2);
           
           logoutWindow.setReason(reason);
-          mdiCanvas.removeAllWindows(); 				
+          mdiCanvas.removeAllPopUps();
+		  removeToolBars();
         } else {
-          mdiCanvas.removeAllWindows();
+          mdiCanvas.removeAllPopUps();
+		  removeToolBars();
           var pageHost:String = FlexGlobals.topLevelApplication.url.split("/")[0];
           var pageURL:String = FlexGlobals.topLevelApplication.url.split("/")[2];
           LOGGER.debug("SingOut to [{0}//{1}/bigbluebutton/api/signOut]", [pageHost, pageURL]);
@@ -523,27 +517,26 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
           urlLoader.load(request);
         }	        
       }
+	
+	  /**
+	   * Removes toolbars from the display list.
+	   * Used only when the user completely logged out.
+	   */
+	  private function removeToolBars():void{
+		  this.removeChild(toolbar);
+		  this.removeChild(controlBar);
+	  }
       
-      public function getLogoutUrl():String {
-        var logoutUrl:String = BBB.initUserConfigManager().getLogoutUrl();
-        if (logoutUrl == null) {
-          LOGGER.debug("URL=[{0}]", [FlexGlobals.topLevelApplication.url]);
-          var pageHost:String = FlexGlobals.topLevelApplication.url.split("/")[0];
-          var pageURL:String = FlexGlobals.topLevelApplication.url.split("/")[2];
-          logoutUrl = pageHost + "//" + pageURL;
-        }      
-        return logoutUrl;
-      }
       
-			private function handleLogout(e:ConnectionFailedEvent):void {
+      private function handleLogout(e:ConnectionFailedEvent):void {
         if (e is ConnectionFailedEvent) {
           showlogoutWindow((e as ConnectionFailedEvent).type);
         }
         else showlogoutWindow("You have logged out of the conference");	
-			}
+      }
       
 			private function redirectToLogoutUrl ():void {
-        		var logoutURL:String = getLogoutUrl();
+        		var logoutURL:String = BBB.getLogoutURL();
 				var request:URLRequest = new URLRequest(logoutURL);
 				LOGGER.debug("Logging out to: {0}", [logoutURL]);
 				navigateToURL(request, '_self');
@@ -561,12 +554,6 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 			}
 			
 			private function attemptReconnect(e:ConnectionFailedEvent):void{
-				/*if (connectionLostWindow != null) return;
-				connectionLostWindow = ConnectionLostWindow(PopUpManager.createPopUp( mdiCanvas, ConnectionLostWindow, true));
-				connectionLostWindow.x = mdiCanvas.width/2 - connectionLostWindow.width/2;
-				connectionLostWindow.y = mdiCanvas.height/2 - connectionLostWindow.height/2;*/
-				
-				//Temporary fix
 				handleLogout(e);
 			}
 			
@@ -637,6 +624,12 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 				ls.y = point1.y - (ls.height/2);	
 			}
 			
+			private function openBreakoutRoomsWindow(e:BreakoutRoomEvent):void  {
+				var popUp:IFlexDisplayObject = PopUpManager.createPopUp(mdiCanvas, BreakoutRoomSettings, true);
+				PopUpManager.centerPopUp(popUp);
+				BreakoutRoomSettings(popUp).initCreateBreakoutRooms(e.joinMode);
+			}
+			
 			private function onFooterLinkClicked(e:TextEvent):void{
 				LOGGER.debug("Clicked on link[{0}] from footer", [e.text]);
 				if (ExternalInterface.available) {
@@ -662,8 +655,7 @@ with BigBlueButton; if not, see <http://www.gnu.org/licenses/>.
 					  horizontalScrollPolicy="off" 
 					  verticalScrollPolicy="off" 
 					  effectsLib="{flexlib.mdi.effects.effectsLib.MDIVistaEffects}" 
-					  width="100%" 
-					  height="100%">
+					  width="100%" >
 		<views:LoadingBar id="progressBar" horizontalCenter="0" verticalCenter="0" width="50%" />
 		<views:BrandingLogo x="{this.width - 300}" y="{this.height - 300}" />
 	</views:MainCanvas>	

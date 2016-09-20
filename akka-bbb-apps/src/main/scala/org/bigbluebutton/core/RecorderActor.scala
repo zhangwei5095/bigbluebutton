@@ -29,16 +29,21 @@ import org.bigbluebutton.core.recorders.events.ParticipantEndAndKickAllRecordEve
 import org.bigbluebutton.core.recorders.events.UndoShapeWhiteboardRecordEvent
 import org.bigbluebutton.core.recorders.events.ClearPageWhiteboardRecordEvent
 import org.bigbluebutton.core.recorders.events.AddShapeWhiteboardRecordEvent
-import org.bigbluebutton.core.service.whiteboard.WhiteboardKeyUtil
+import org.bigbluebutton.core.recorders.events.DeskShareStartRTMPRecordEvent
+import org.bigbluebutton.core.recorders.events.DeskShareStopRTMPRecordEvent
+import org.bigbluebutton.core.recorders.events.DeskShareNotifyViewersRTMPRecordEvent
+// import org.bigbluebutton.core.service.whiteboard.WhiteboardKeyUtil
+import org.bigbluebutton.common.messages.WhiteboardKeyUtil
 import org.bigbluebutton.core.recorders.events.ModifyTextWhiteboardRecordEvent
+import org.bigbluebutton.core.recorders.events.EditCaptionHistoryRecordEvent
 import scala.collection.immutable.StringOps
 
 object RecorderActor {
-  def props(meetingId: String, recorder: RecorderApplication): Props =
-    Props(classOf[RecorderActor], meetingId, recorder)
+  def props(recorder: RecorderApplication): Props =
+    Props(classOf[RecorderActor], recorder)
 }
 
-class RecorderActor(val meetingId: String, val recorder: RecorderApplication)
+class RecorderActor(val recorder: RecorderApplication)
     extends Actor with ActorLogging {
 
   def receive = {
@@ -67,6 +72,10 @@ class RecorderActor(val meetingId: String, val recorder: RecorderApplication)
     case msg: SendWhiteboardAnnotationEvent => handleSendWhiteboardAnnotationEvent(msg)
     case msg: ClearWhiteboardEvent => handleClearWhiteboardEvent(msg)
     case msg: UndoWhiteboardEvent => handleUndoWhiteboardEvent(msg)
+    case msg: EditCaptionHistoryReply => handleEditCaptionHistoryReply(msg)
+    case msg: DeskShareStartRTMPBroadcast => handleDeskShareStartRTMPBroadcast(msg)
+    case msg: DeskShareStopRTMPBroadcast => handleDeskShareStopRTMPBroadcast(msg)
+    case msg: DeskShareNotifyViewersRTMP => handleDeskShareNotifyViewersRTMP(msg)
     case _ => // do nothing
   }
 
@@ -297,21 +306,30 @@ class RecorderActor(val meetingId: String, val recorder: RecorderApplication)
   }
 
   private def handleChangedUserEmojiStatus(msg: UserChangedEmojiStatus) {
-    val status = UserStatusChange(msg.meetingID, msg.recorded,
-      msg.userID, "emojiStatus", msg.emojiStatus)
-    handleUserStatusChange(status)
+    if (msg.recorded) {
+      val status = UserStatusChange(msg.meetingID, msg.recorded,
+        msg.userID, "emojiStatus", msg.emojiStatus)
+      handleUserStatusChange(status)
+    }
+
   }
 
   private def handleUserSharedWebcam(msg: UserSharedWebcam) {
-    val status = UserStatusChange(msg.meetingID, msg.recorded,
-      msg.userID, "hasStream", "true,stream=" + msg.stream)
-    handleUserStatusChange(status)
+    if (msg.recorded) {
+      val status = UserStatusChange(msg.meetingID, msg.recorded,
+        msg.userID, "hasStream", "true,stream=" + msg.stream)
+      handleUserStatusChange(status)
+    }
+
   }
 
   private def handleUserUnsharedWebcam(msg: UserUnsharedWebcam) {
-    val status = UserStatusChange(msg.meetingID, msg.recorded,
-      msg.userID, "hasStream", "false,stream=" + msg.stream)
-    handleUserStatusChange(status)
+    if (msg.recorded) {
+      val status = UserStatusChange(msg.meetingID, msg.recorded,
+        msg.userID, "hasStream", "false,stream=" + msg.stream)
+      handleUserStatusChange(status)
+    }
+
   }
 
   private def handleUserStatusChange(msg: UserStatusChange): Unit = {
@@ -365,55 +383,107 @@ class RecorderActor(val meetingId: String, val recorder: RecorderApplication)
   }
 
   private def handleSendWhiteboardAnnotationEvent(msg: SendWhiteboardAnnotationEvent) {
-    if ((msg.shape.shapeType == WhiteboardKeyUtil.TEXT_TYPE) && (msg.shape.status != WhiteboardKeyUtil.TEXT_CREATED_STATUS)) {
+    if (msg.recorded) {
+      if ((msg.shape.shapeType == WhiteboardKeyUtil.TEXT_TYPE) && (msg.shape.status != WhiteboardKeyUtil.TEXT_CREATED_STATUS)) {
 
-      val event = new ModifyTextWhiteboardRecordEvent()
+        val event = new ModifyTextWhiteboardRecordEvent()
+        event.setMeetingId(msg.meetingID)
+        event.setTimestamp(TimestampGenerator.generateTimestamp)
+        event.setPresentation(getPresentationId(msg.whiteboardId))
+        event.setPageNumber(getPageNum(msg.whiteboardId))
+        event.setWhiteboardId(msg.whiteboardId)
+        event.addAnnotation(mapAsJavaMap(msg.shape.shape))
+        recorder.record(msg.meetingID, event)
+      } else if ((msg.shape.shapeType == WhiteboardKeyUtil.POLL_RESULT_TYPE)) {
+        val event = new AddShapeWhiteboardRecordEvent()
+        event.setMeetingId(msg.meetingID)
+        event.setTimestamp(TimestampGenerator.generateTimestamp)
+        event.setPresentation(getPresentationId(msg.whiteboardId))
+        event.setPageNumber(getPageNum(msg.whiteboardId))
+        event.setWhiteboardId(msg.whiteboardId);
+        event.addAnnotation(mapAsJavaMap(msg.shape.shape))
+        recorder.record(msg.meetingID, event)
+      } else {
+        val event = new AddShapeWhiteboardRecordEvent()
+        event.setMeetingId(msg.meetingID)
+        event.setTimestamp(TimestampGenerator.generateTimestamp)
+        event.setPresentation(getPresentationId(msg.whiteboardId))
+        event.setPageNumber(getPageNum(msg.whiteboardId))
+        event.setWhiteboardId(msg.whiteboardId);
+        event.addAnnotation(mapAsJavaMap(msg.shape.shape))
+        recorder.record(msg.meetingID, event)
+      }
+    }
+
+  }
+
+  private def handleClearWhiteboardEvent(msg: ClearWhiteboardEvent) {
+    if (msg.recorded) {
+      val event = new ClearPageWhiteboardRecordEvent()
       event.setMeetingId(msg.meetingID)
       event.setTimestamp(TimestampGenerator.generateTimestamp)
       event.setPresentation(getPresentationId(msg.whiteboardId))
       event.setPageNumber(getPageNum(msg.whiteboardId))
       event.setWhiteboardId(msg.whiteboardId)
-      event.addAnnotation(mapAsJavaMap(msg.shape.shape))
-      recorder.record(msg.meetingID, event)
-    } else if ((msg.shape.shapeType == WhiteboardKeyUtil.POLL_RESULT_TYPE)) {
-      val event = new AddShapeWhiteboardRecordEvent()
-      event.setMeetingId(msg.meetingID)
-      event.setTimestamp(TimestampGenerator.generateTimestamp)
-      event.setPresentation(getPresentationId(msg.whiteboardId))
-      event.setPageNumber(getPageNum(msg.whiteboardId))
-      event.setWhiteboardId(msg.whiteboardId);
-      event.addAnnotation(mapAsJavaMap(msg.shape.shape))
-      recorder.record(msg.meetingID, event)
-    } else {
-      val event = new AddShapeWhiteboardRecordEvent()
-      event.setMeetingId(msg.meetingID)
-      event.setTimestamp(TimestampGenerator.generateTimestamp)
-      event.setPresentation(getPresentationId(msg.whiteboardId))
-      event.setPageNumber(getPageNum(msg.whiteboardId))
-      event.setWhiteboardId(msg.whiteboardId);
-      event.addAnnotation(mapAsJavaMap(msg.shape.shape))
       recorder.record(msg.meetingID, event)
     }
-  }
 
-  private def handleClearWhiteboardEvent(msg: ClearWhiteboardEvent) {
-    val event = new ClearPageWhiteboardRecordEvent()
-    event.setMeetingId(msg.meetingID)
-    event.setTimestamp(TimestampGenerator.generateTimestamp)
-    event.setPresentation(getPresentationId(msg.whiteboardId))
-    event.setPageNumber(getPageNum(msg.whiteboardId))
-    event.setWhiteboardId(msg.whiteboardId)
-    recorder.record(msg.meetingID, event)
   }
 
   private def handleUndoWhiteboardEvent(msg: UndoWhiteboardEvent) {
-    val event = new UndoShapeWhiteboardRecordEvent()
-    event.setMeetingId(msg.meetingID)
+    if (msg.recorded) {
+      val event = new UndoShapeWhiteboardRecordEvent()
+      event.setMeetingId(msg.meetingID)
+      event.setTimestamp(TimestampGenerator.generateTimestamp)
+      event.setPresentation(getPresentationId(msg.whiteboardId))
+      event.setPageNumber(getPageNum(msg.whiteboardId))
+      event.setWhiteboardId(msg.whiteboardId)
+      event.setShapeId(msg.shapeId);
+      recorder.record(msg.meetingID, event)
+    }
+
+  }
+
+  private def handleEditCaptionHistoryReply(msg: EditCaptionHistoryReply) {
+    if (msg.recorded) {
+      val ev = new EditCaptionHistoryRecordEvent();
+      ev.setTimestamp(TimestampGenerator.generateTimestamp);
+      ev.setMeetingId(msg.meetingID);
+      ev.setStartIndex(msg.startIndex.toString());
+      ev.setEndIndex(msg.endIndex.toString());
+      ev.setLocale(msg.locale);
+      ev.setLocaleCode(msg.localeCode);
+      ev.setText(msg.text);
+      recorder.record(msg.meetingID, ev);
+    }
+  }
+
+  private def handleDeskShareStartRTMPBroadcast(msg: DeskShareStartRTMPBroadcast) {
+    val event = new DeskShareStartRTMPRecordEvent()
+    event.setMeetingId(msg.conferenceName)
+    event.setStreamPath(msg.streamPath)
     event.setTimestamp(TimestampGenerator.generateTimestamp)
-    event.setPresentation(getPresentationId(msg.whiteboardId))
-    event.setPageNumber(getPageNum(msg.whiteboardId))
-    event.setWhiteboardId(msg.whiteboardId)
-    event.setShapeId(msg.shapeId);
+    log.info("handleDeskShareStartRTMPBroadcast " + msg.conferenceName)
+    recorder.record(msg.conferenceName, event)
+  }
+
+  private def handleDeskShareStopRTMPBroadcast(msg: DeskShareStopRTMPBroadcast) {
+    val event = new DeskShareStopRTMPRecordEvent()
+    event.setMeetingId(msg.conferenceName)
+    event.setStreamPath(msg.streamPath)
+    event.setTimestamp(TimestampGenerator.generateTimestamp)
+    log.info("handleDeskShareStopRTMPBroadcast " + msg.conferenceName)
+    recorder.record(msg.conferenceName, event)
+  }
+
+  private def handleDeskShareNotifyViewersRTMP(msg: DeskShareNotifyViewersRTMP) {
+    val event = new DeskShareNotifyViewersRTMPRecordEvent()
+    event.setMeetingId(msg.meetingID)
+    event.setStreamPath(msg.streamPath)
+    event.setBroadcasting(msg.broadcasting)
+    event.setTimestamp(TimestampGenerator.generateTimestamp)
+
+    log.info("handleDeskShareNotifyViewersRTMP " + msg.meetingID)
     recorder.record(msg.meetingID, event)
   }
 }

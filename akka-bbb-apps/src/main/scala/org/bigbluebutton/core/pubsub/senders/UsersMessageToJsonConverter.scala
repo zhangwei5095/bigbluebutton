@@ -23,6 +23,7 @@ object UsersMessageToJsonConverter {
     wuser += "webcam_stream" -> user.webcamStreams.toArray
     wuser += "phone_user" -> user.phoneUser
     wuser += "listenOnly" -> user.listenOnly
+    wuser += "avatarURL" -> user.avatarURL
 
     val vuser = new scala.collection.mutable.HashMap[String, Any]
     vuser += "userid" -> user.voiceUser.userId
@@ -46,6 +47,7 @@ object UsersMessageToJsonConverter {
     wuser += "name" -> user.name
     wuser += "role" -> user.role.toString()
     wuser += "authToken" -> user.authToken
+    wuser += "avatarURL" -> user.avatarURL
 
     mapAsJavaMap(wuser)
   }
@@ -112,6 +114,16 @@ object UsersMessageToJsonConverter {
     payload.put(Constants.USER_ID, msg.userId)
 
     val header = Util.buildHeader(MessageNames.DISCONNECT_USER, None)
+    Util.buildJson(header, payload)
+  }
+
+  def sendUserEjectedFromMeetingToJson(msg: UserEjectedFromMeeting) {
+    val payload = new java.util.HashMap[String, Any]()
+    payload.put(Constants.MEETING_ID, msg.meetingID)
+    payload.put(Constants.USER_ID, msg.userId)
+    payload.put(Constants.EJECTED_BY, msg.ejectedBy)
+
+    val header = Util.buildHeader(MessageNames.USER_EJECTED_FROM_MEETING, None)
     Util.buildJson(header, payload)
   }
 

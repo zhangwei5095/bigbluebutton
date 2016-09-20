@@ -18,6 +18,8 @@
  */
 package org.bigbluebutton.modules.videoconf.maps
 {
+  import com.asfusion.mate.events.Dispatcher;
+  
   import flash.events.IEventDispatcher;
   import flash.media.Camera;
   
@@ -27,6 +29,7 @@ package org.bigbluebutton.modules.videoconf.maps
   import org.as3commons.logging.api.ILogger;
   import org.as3commons.logging.api.getClassLogger;
   import org.bigbluebutton.common.Media;
+  import org.bigbluebutton.common.events.CloseWindowEvent;
   import org.bigbluebutton.common.events.OpenWindowEvent;
   import org.bigbluebutton.common.events.ToolbarButtonEvent;
   import org.bigbluebutton.core.BBB;
@@ -82,9 +85,12 @@ package org.bigbluebutton.modules.videoconf.maps
 	private var _cameraIndex:int;
 	private var _videoProfile:VideoProfile;
 	
+	private var globalDispatcher:Dispatcher;
+	
     public function VideoEventMapDelegate(dispatcher:IEventDispatcher)
     {
       _dispatcher = dispatcher;
+	  globalDispatcher = new Dispatcher();
     }
 
     private function get me():String {
@@ -412,11 +418,14 @@ package org.bigbluebutton.modules.videoconf.maps
     public function stopModule():void {
       LOGGER.debug("VideoEventMapDelegate:: stopping video module");
       closeAllWindows();
+      var event:CloseWindowEvent = new CloseWindowEvent(CloseWindowEvent.CLOSE_WINDOW_EVENT);
+      event.window = _videoDock;
+      globalDispatcher.dispatchEvent(event);
 	  proxy.reconnectWhenDisconnected(false);
       proxy.disconnect();
     }
 
-    public function closeAllWindows():void{
+    private function closeAllWindows():void {
       LOGGER.debug("VideoEventMapDelegate:: closing all windows");
       if (_isPublishing) {
         stopBroadcasting();
@@ -448,13 +457,14 @@ package org.bigbluebutton.modules.videoconf.maps
     public function connectedToVideoApp(event: ConnectedEvent):void{
       LOGGER.debug("VideoEventMapDelegate:: [{0}] Connected to video application.", [me]);
       _ready = true;
-		if (event.reconnection) {
-		 closeAllWindows()
-		} else {
-			addToolbarButton();					  
-		}
-		openWebcamWindows();
-	
+      if (event.reconnection) {
+        closeAllWindows();
+        handleRestream();
+      } else {
+        addToolbarButton();
+      }
+      
+      openWebcamWindows();
     }
 
     public function handleCameraSetting(event:BBBEvent):void {
@@ -471,7 +481,7 @@ package org.bigbluebutton.modules.videoconf.maps
 		_restream = event.payload.restream;
 	}
 	
-	public function handleRestream(event:BBBEvent):void {
+	private function handleRestream():void {
 		if(_restream){
 			LOGGER.debug("VideoEventMapDelegate::handleRestream [{0},{1}]", [_cameraIndex, _videoProfile.id]);
 			initCameraWithSettings(_cameraIndex, _videoProfile);
@@ -503,6 +513,10 @@ package org.bigbluebutton.modules.videoconf.maps
         LOGGER.debug("VideoEventMapDelegate::handleStoppedViewingWebcamEvent [{0}] Opening avatar for user [{1}]", [me, event.webcamUserID]);
         openAvatarWindowFor(event.webcamUserID);
       }
+    }
+
+    public function handleReconnectDisconnectedEvent(event:BBBEvent):void {
+      if (event.payload.type == "BIGBLUEBUTTON_CONNECTION") closeAllWindows();
     }
   }
 }
